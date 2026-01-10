@@ -1,0 +1,24 @@
+match_id,date,tournament,surface,best_of,round,player_a,player_b,winner,rank_a,rank_b
+1,2025-01-05,Brisbane,Hard,3,R16,Carlos Alcaraz,Casper Ruud,A,2,11
+2,2025-01-06,Brisbane,Hard,3,R16,Daniil Medvedev,Stefanos Tsitsipas,A,3,7
+3,2025-01-07,Brisbane,Hard,3,QF,Carlos Alcaraz,Daniil Medvedev,B,2,3
+4,2025-01-08,Brisbane,Hard,3,QF,Jannik Sinner,Alexander Zverev,A,4,6
+5,2025-01-10,Brisbane,Hard,3,SF,Daniil Medvedev,Jannik Sinner,B,3,4
+6,2025-01-12,Brisbane,Hard,3,F,Carlos Alcaraz,Jannik Sinner,B,2,4
+7,2025-01-15,Australian Open,Hard,5,R32,Novak Djokovic,Stefanos Tsitsipas,A,1,7
+8,2025-01-17,Australian Open,Hard,5,R32,Rafael Nadal,Casper Ruud,B,9,11
+9,2025-01-19,Australian Open,Hard,5,R16,Novak Djokovic,Daniil Medvedev,B,1,3
+10,2025-01-20,Australian Open,Hard,5,R16,Carlos Alcaraz,Jannik Sinner,B,2,4
+11,2025-01-22,Australian Open,Hard,5,QF,Daniil Medvedev,Casper Ruud,A,3,11
+12,2025-01-23,Australian Open,Hard,5,QF,Jannik Sinner,Alexander Zverev,A,4,6
+13,2025-01-25,Australian Open,Hard,5,SF,Daniil Medvedev,Jannik Sinner,B,3,4
+14,2025-01-26,Australian Open,Hard,5,F,Novak Djokovic,Jannik Sinner,B,1,4
+15,2025-02-12,Rotterdam,Hard,3,R16,Alexander Zverev,Stefanos Tsitsipas,A,6,7
+16,2025-02-13,Rotterdam,Hard,3,R16,Casper Ruud,Carlos Alcaraz,B,11,2
+17,2025-02-15,Rotterdam,Hard,3,QF,Alexander Zverev,Carlos Alcaraz,B,6,2
+18,2025-03-10,Indian Wells,Hard,3,R32,Jannik Sinner,Daniil Medvedev,A,4,3
+19,2025-03-11,Indian Wells,Hard,3,R32,Novak Djokovic,Alexander Zverev,A,1,6
+20,2025-03-12,Indian Wells,Hard,3,R32,Carlos Alcaraz,Rafael Nadal,A,2,9
+21,2025-03-14,Indian Wells,Hard,3,R16,Novak Djokovic,Jannik Sinner,B,1,4
+22,2025-03-16,Indian Wells,Hard,3,QF,Carlos Alcaraz,Casper Ruud,A,2,11
+23,2025-03-18,Indian Wells,Hard,3,SF,Jannik Sinner,Carlos Alcaraz,A,4,2
