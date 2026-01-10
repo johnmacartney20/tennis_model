@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+
+# Model artifacts
+models/trained/*.joblib
+
+# Generated data outputs
+data/interim/
+data/features/
+data/outputs/
+
+# Downloaded full datasets (keep small samples tracked)
+data/raw/matches.csv
+data/raw/matches_atp.csv
+data/raw/matches_wta.csv
