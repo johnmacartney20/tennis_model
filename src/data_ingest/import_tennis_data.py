@@ -66,6 +66,21 @@ def ingest(
 
     matches = matches.sort_values(["date"]).reset_index(drop=True)
 
+    # Add tour (ATP/WTA) if missing.
+    if "tour" not in matches.columns:
+        if "match_id" in matches.columns:
+            matches["tour"] = (
+                matches["match_id"].astype(str).str.split(":", n=1).str[0].str.upper()
+            )
+            matches.loc[~matches["tour"].isin(["ATP", "WTA"]), "tour"] = "ATP"
+        else:
+            matches["tour"] = "ATP"
+
+    if "tour" not in upcoming.columns:
+        upcoming["tour"] = "ATP"
+    upcoming["tour"] = upcoming["tour"].astype(str).str.upper().where(upcoming["tour"].notna(), "ATP")
+    upcoming.loc[~upcoming["tour"].isin(["ATP", "WTA"]), "tour"] = "ATP"
+
     interim_matches_path = paths.interim_dir / "matches.csv"
     interim_upcoming_path = paths.interim_dir / "upcoming_matches.csv"
 

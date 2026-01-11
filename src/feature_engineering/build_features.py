@@ -64,6 +64,13 @@ def build_features(
 
     matches = matches.sort_values(["date"]).reset_index(drop=True)
 
+    if "tour" not in matches.columns:
+        matches["tour"] = "ATP"
+    if "tour" not in upcoming.columns:
+        upcoming["tour"] = "ATP"
+    matches["tour"] = matches["tour"].astype(str).str.upper()
+    upcoming["tour"] = upcoming["tour"].astype(str).str.upper()
+
     matches["surface"] = matches["surface"].apply(_standardize_surface)
     upcoming["surface"] = upcoming["surface"].apply(_standardize_surface)
 
@@ -105,13 +112,13 @@ def build_features(
         "return_pw",  # 1 - opponent serve_pw
     ]
 
-    # dicts keyed by player or (player,surface)
-    overall: dict[str, dict[str, float | None]] = {}
-    by_surface: dict[tuple[str, str], dict[str, float | None]] = {}
+    # dicts keyed by (tour, player) or (tour, player, surface)
+    overall: dict[tuple[str, str], dict[str, float | None]] = {}
+    by_surface: dict[tuple[str, str, str], dict[str, float | None]] = {}
 
-    def _get_state(player: str, surface: str) -> tuple[dict[str, float | None], dict[str, float | None]]:
-        o = overall.setdefault(player, {m: None for m in metrics})
-        s = by_surface.setdefault((player, surface), {m: None for m in metrics})
+    def _get_state(tour: str, player: str, surface: str) -> tuple[dict[str, float | None], dict[str, float | None]]:
+        o = overall.setdefault((tour, player), {m: None for m in metrics})
+        s = by_surface.setdefault((tour, player, surface), {m: None for m in metrics})
         return o, s
 
     def _rate_defaults(state: dict[str, float | None]) -> dict[str, float]:
@@ -125,11 +132,12 @@ def build_features(
     # iterate row-wise in date order
     for row in matches.itertuples(index=False):
         surface = _standardize_surface(getattr(row, "surface"))
+        tour = str(getattr(row, "tour")).upper() if hasattr(row, "tour") else "ATP"
         pa = getattr(row, "player_a")
         pb = getattr(row, "player_b")
 
-        o_a, s_a = _get_state(pa, surface)
-        o_b, s_b = _get_state(pb, surface)
+        o_a, s_a = _get_state(tour, pa, surface)
+        o_b, s_b = _get_state(tour, pb, surface)
 
         a_overall_pre.append(_rate_defaults(o_a))
         b_overall_pre.append(_rate_defaults(o_b))
@@ -218,7 +226,31 @@ def build_features(
             o_b[m] = _ema_update(o_b[m], rates_b[m], alpha)
             s_b[m] = _ema_update(s_b[m], rates_b[m], alpha)
 
-    matches_with_elo, ratings_df = add_elo_features(matches)
+    # Elo should also be tour-aware; use tour-qualified player ids for computation
+    tmp = matches.copy()
+    tmp["player_a"] = tmp["tour"].astype(str) + "::" + tmp["player_a"].astype(str)
+    tmp["player_b"] = tmp["tour"].astype(str) + "::" + tmp["player_b"].astype(str)
+
+    matches_with_elo_keyed, ratings_df_keyed = add_elo_features(tmp)
+
+    # Bring Elo columns back to the original matches
+    matches_with_elo = matches.copy()
+    matches_with_elo["elo_a_pre"] = matches_with_elo_keyed["elo_a_pre"].values
+    matches_with_elo["elo_b_pre"] = matches_with_elo_keyed["elo_b_pre"].values
+    matches_with_elo["elo_diff"] = matches_with_elo_keyed["elo_diff"].values
+
+    # Split ratings back into tour/player
+    ratings_df = ratings_df_keyed.copy()
+    parts = ratings_df["player"].astype(str).str.split("::", n=1, expand=True)
+    if parts.shape[1] == 1:
+        ratings_df["tour"] = "ATP"
+        ratings_df["player"] = parts[0]
+    else:
+        ratings_df["tour"] = parts[0].where(parts[0].notna() & (parts[0] != ""), "ATP")
+        ratings_df["player"] = parts[1].where(parts[1].notna() & (parts[1] != ""), ratings_df["player"].astype(str))
+
+    ratings_df["tour"] = ratings_df["tour"].astype(str).str.upper()
+    ratings_df = ratings_df[["tour", "player", "elo"]].sort_values(["tour", "elo"], ascending=[True, False]).reset_index(drop=True)
 
     # Attach EMA feature columns to matches_with_elo (same row order as matches)
     ema_cols = []
@@ -259,6 +291,7 @@ def build_features(
     # Minimal feature set (keep it easy to extend)
     feature_cols = [
         "date",
+        "tour",
         "surface",
         "best_of",
         "player_a",
@@ -279,64 +312,76 @@ def build_features(
     write_csv(train_features, train_out)
 
     # Upcoming features: attach latest Elo ratings (pre-match)
-    elo_map = dict(zip(ratings_df["player"], ratings_df["elo"]))
+    elo_map = dict(zip((ratings_df["tour"].astype(str) + "::" + ratings_df["player"].astype(str)), ratings_df["elo"]))
 
     # Build latest EMA tables from the post-loop state
     overall_latest = (
         pd.DataFrame(
             [
-                {"player": p, **{f"{m}_ema": (default_rate if st[m] is None else float(st[m])) for m in metrics}}
-                for p, st in overall.items()
+                {
+                    "tour": k[0],
+                    "player": k[1],
+                    **{f"{m}_ema": (default_rate if st[m] is None else float(st[m])) for m in metrics},
+                }
+                for k, st in overall.items()
             ]
         )
         if overall
-        else pd.DataFrame(columns=["player"] + [f"{m}_ema" for m in metrics])
+        else pd.DataFrame(columns=["tour", "player"] + [f"{m}_ema" for m in metrics])
     )
     surface_latest = (
         pd.DataFrame(
             [
                 {
-                    "player": p,
-                    "surface": s,
+                    "tour": k[0],
+                    "player": k[1],
+                    "surface": k[2],
                     **{f"{m}_ema_surface": (default_rate if st[m] is None else float(st[m])) for m in metrics},
                 }
-                for (p, s), st in by_surface.items()
+                for k, st in by_surface.items()
             ]
         )
         if by_surface
-        else pd.DataFrame(columns=["player", "surface"] + [f"{m}_ema_surface" for m in metrics])
+        else pd.DataFrame(columns=["tour", "player", "surface"] + [f"{m}_ema_surface" for m in metrics])
     )
 
-    def _elo_for(player: str) -> float:
-        return float(elo_map.get(player, 1500.0))
+    # Persist player strength snapshots for reuse
+    write_csv(overall_latest.sort_values(["tour", "player"]).reset_index(drop=True), paths.interim_dir / "player_strength_overall.csv")
+    write_csv(
+        surface_latest.sort_values(["tour", "surface", "player"]).reset_index(drop=True),
+        paths.interim_dir / "player_strength_surface.csv",
+    )
+
+    def _elo_for(tour: str, player: str) -> float:
+        return float(elo_map.get(f"{tour}::{player}", 1500.0))
 
     upcoming_feat = upcoming.copy()
-    upcoming_feat["elo_a_pre"] = upcoming_feat["player_a"].apply(_elo_for)
-    upcoming_feat["elo_b_pre"] = upcoming_feat["player_b"].apply(_elo_for)
+    upcoming_feat["elo_a_pre"] = upcoming_feat.apply(lambda r: _elo_for(r["tour"], r["player_a"]), axis=1)
+    upcoming_feat["elo_b_pre"] = upcoming_feat.apply(lambda r: _elo_for(r["tour"], r["player_b"]), axis=1)
     upcoming_feat["elo_diff"] = upcoming_feat["elo_a_pre"] - upcoming_feat["elo_b_pre"]
 
     # Join overall EMA features
     upcoming_feat = upcoming_feat.merge(
-        overall_latest.add_prefix("a_").rename(columns={"a_player": "player_a"}),
+        overall_latest.add_prefix("a_").rename(columns={"a_player": "player_a", "a_tour": "tour"}),
         how="left",
-        on="player_a",
+        on=["tour", "player_a"],
     )
     upcoming_feat = upcoming_feat.merge(
-        overall_latest.add_prefix("b_").rename(columns={"b_player": "player_b"}),
+        overall_latest.add_prefix("b_").rename(columns={"b_player": "player_b", "b_tour": "tour"}),
         how="left",
-        on="player_b",
+        on=["tour", "player_b"],
     )
 
     # Join surface EMA features
     upcoming_feat = upcoming_feat.merge(
-        surface_latest.add_prefix("a_").rename(columns={"a_player": "player_a", "a_surface": "surface"}),
+        surface_latest.add_prefix("a_").rename(columns={"a_player": "player_a", "a_surface": "surface", "a_tour": "tour"}),
         how="left",
-        on=["player_a", "surface"],
+        on=["tour", "player_a", "surface"],
     )
     upcoming_feat = upcoming_feat.merge(
-        surface_latest.add_prefix("b_").rename(columns={"b_player": "player_b", "b_surface": "surface"}),
+        surface_latest.add_prefix("b_").rename(columns={"b_player": "player_b", "b_surface": "surface", "b_tour": "tour"}),
         how="left",
-        on=["player_b", "surface"],
+        on=["tour", "player_b", "surface"],
     )
 
     # Fill missing EMA values with defaults (new/unknown players)
@@ -379,6 +424,7 @@ def build_features(
 
     upcoming_cols = [
         "date",
+        "tour",
         "tournament",
         "round",
         "surface",

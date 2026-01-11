@@ -33,20 +33,23 @@ def add_elo_features(matches: pd.DataFrame, config: EloConfig | None = None) -> 
     if missing:
         raise ValueError(f"Matches missing required columns for Elo: {sorted(missing)}")
 
-    ratings: dict[str, float] = {}
+    has_tour = "tour" in matches.columns
+    ratings: dict[tuple[str, str], float] = {}
 
     elo_a_pre: list[float] = []
     elo_b_pre: list[float] = []
     elo_diff: list[float] = []
 
     for row in matches.itertuples(index=False):
+        tour = getattr(row, "tour") if has_tour else "UNK"
+        tour = str(tour).upper() if tour is not None else "UNK"
         player_a = getattr(row, "player_a")
         player_b = getattr(row, "player_b")
         winner = getattr(row, "winner")
         best_of = int(getattr(row, "best_of"))
 
-        ra = ratings.get(player_a, config.base_rating)
-        rb = ratings.get(player_b, config.base_rating)
+        ra = ratings.get((tour, player_a), config.base_rating)
+        rb = ratings.get((tour, player_b), config.base_rating)
 
         elo_a_pre.append(ra)
         elo_b_pre.append(rb)
@@ -60,18 +63,20 @@ def add_elo_features(matches: pd.DataFrame, config: EloConfig | None = None) -> 
         ra_new = ra + k * (score_a - expected_a)
         rb_new = rb + k * ((1.0 - score_a) - (1.0 - expected_a))
 
-        ratings[player_a] = ra_new
-        ratings[player_b] = rb_new
+        ratings[(tour, player_a)] = ra_new
+        ratings[(tour, player_b)] = rb_new
 
     out = matches.copy()
     out["elo_a_pre"] = np.array(elo_a_pre, dtype=float)
     out["elo_b_pre"] = np.array(elo_b_pre, dtype=float)
     out["elo_diff"] = np.array(elo_diff, dtype=float)
 
-    ratings_df = (
-        pd.DataFrame({"player": list(ratings.keys()), "elo": list(ratings.values())})
-        .sort_values("elo", ascending=False)
-        .reset_index(drop=True)
-    )
+    ratings_df = pd.DataFrame(
+        {
+            "tour": [k[0] for k in ratings.keys()],
+            "player": [k[1] for k in ratings.keys()],
+            "elo": list(ratings.values()),
+        }
+    ).sort_values(["tour", "elo"], ascending=[True, False]).reset_index(drop=True)
 
     return out, ratings_df

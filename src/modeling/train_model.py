@@ -53,6 +53,8 @@ def train_model(features_path: Path | None = None) -> TrainResult:
 
     # Model features (keep player names out for now; can add player embeddings later)
     categorical = ["surface"]
+    if "tour" in df.columns:
+        categorical = ["tour", "surface"]
 
     # Auto-include engineered numeric diffs
     numeric = ["best_of"]

@@ -140,6 +140,7 @@ def download_sackmann_matches(
     out = pd.DataFrame()
     out["match_id"] = raw["match_key"]
     out["date"] = raw["date"]
+    out["tour"] = raw["source_tour"].astype(str).str.upper()
     out["tournament"] = raw["tourney_name"]
     out["surface"] = raw["surface"].fillna("Unknown")
     out["best_of"] = pd.to_numeric(raw["best_of"], errors="coerce").fillna(3).astype(int)
@@ -148,6 +149,7 @@ def download_sackmann_matches(
     # Assign A/B with deterministic swapping to avoid label leakage.
     out["player_a"] = raw["winner_name"].where(~swap, raw["loser_name"])
     out["player_b"] = raw["loser_name"].where(~swap, raw["winner_name"])
+    out["tour"] = raw["source_tour"].astype(str).str.upper()
     out["winner"] = pd.Series("A", index=raw.index).where(~swap, "B")
 
     out["rank_a"] = raw["winner_rank"].where(~swap, raw["loser_rank"])

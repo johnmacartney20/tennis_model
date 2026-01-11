@@ -29,6 +29,27 @@ Outputs:
 - `data/outputs/predictions_latest.csv`
 - `models/trained/win_model.joblib`
 
+## Australian Open predictions
+
+### Match-by-match (requires the draw)
+1) Copy the template `data/raw/upcoming_matches_template.csv` to `data/raw/upcoming_matches.csv`
+2) Fill in `player_a` and `player_b` for each matchup (and set `tour` to `ATP` or `WTA`)
+3) Run:
+
+```bash
+python main.py pipeline
+```
+
+This writes `data/outputs/predictions_latest.csv`.
+
+### Outrights (does not require the draw)
+
+You can generate rough Australian Open outright win probabilities via Monte Carlo (random bracket) using:
+
+```bash
+python -m src.analysis.simulate_australian_open
+```
+
 ## Free historical data (ATP/WTA)
 
 This repo can download and standardize historical match results from Jeff Sackmann’s public tennis datasets.
