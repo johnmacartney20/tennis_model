@@ -18,6 +18,7 @@ from src.utils.helpers import read_csv, write_csv
 class TheOddsApiConfig:
     api_key_env: str = "THE_ODDS_API_KEY"
     regions_env: str = "THE_ODDS_API_REGIONS"
+    sport_keys_env: str = "THE_ODDS_API_SPORT_KEYS"
     regions: str = "us"
     markets: str = "h2h"
     odds_format: str = "decimal"  # request odds in decimal
@@ -39,10 +40,54 @@ def _validate_regions(regions: str) -> str:
 
 
 def _sport_key_for_tour(tour: str) -> str:
+    # Kept for backward compatibility; the actual keys depend on the provider.
     t = str(tour).strip().upper()
-    if t == "WTA":
-        return "tennis_wta"
-    return "tennis_atp"
+    return "tennis_wta" if t == "WTA" else "tennis_atp"
+
+
+def _list_tennis_sports(session: requests.Session, api_key: str) -> list[dict[str, Any]]:
+    url = "https://api.the-odds-api.com/v4/sports"
+    r = session.get(url, params={"apiKey": api_key, "all": "true"}, timeout=20)
+    if r.status_code != 200:
+        raise RuntimeError(f"The Odds API error ({r.status_code}) on /sports: {r.text[:500]}")
+    data = r.json()
+    if not isinstance(data, list):
+        raise RuntimeError("Unexpected response from The Odds API /sports (expected list)")
+    return [s for s in data if str(s.get("group", "")).strip().lower() == "tennis"]
+
+
+def _choose_sport_keys_for_upcoming(
+    upcoming: pd.DataFrame,
+    tennis_sports: list[dict[str, Any]],
+) -> list[str]:
+    # Try to match on tournament name if possible.
+    tournaments = sorted({str(t).strip().lower() for t in upcoming.get("tournament", pd.Series(dtype=str)).dropna().unique() if str(t).strip()})
+    if not tournaments:
+        return []
+
+    def _norm(s: str) -> str:
+        return normalize_name(s)
+
+    keys: list[str] = []
+    for t in tournaments:
+        t_norm = _norm(t)
+        # match against title (e.g. "ATP Australian Open")
+        for sp in tennis_sports:
+            title = _norm(str(sp.get("title", "")))
+            key = str(sp.get("key", "")).strip()
+            if not key:
+                continue
+            if t_norm and t_norm in title:
+                keys.append(key)
+
+    # de-dupe preserving order
+    seen: set[str] = set()
+    out: list[str] = []
+    for k in keys:
+        if k not in seen:
+            out.append(k)
+            seen.add(k)
+    return out
 
 
 def fetch_odds_theoddsapi(
@@ -115,9 +160,26 @@ def fetch_odds_theoddsapi(
         meta_by_pair[k1] = meta
         meta_by_pair[k2] = meta
 
-    sport_keys = sorted({_sport_key_for_tour(t) for t in upcoming["tour"].dropna().unique()})
-
     session = requests.Session()
+    tennis_sports = _list_tennis_sports(session, key)
+
+    # Allow explicit override of sport keys (comma-delimited).
+    override = os.getenv(config.sport_keys_env, "").strip()
+    if override:
+        sport_keys = [s.strip() for s in override.split(",") if s.strip()]
+    else:
+        sport_keys = _choose_sport_keys_for_upcoming(upcoming, tennis_sports)
+
+    if not sport_keys:
+        available = sorted({str(s.get("title", "")) for s in tennis_sports if s.get("title")})
+        raise RuntimeError(
+            "Could not determine a tennis sport key for these upcoming matches. "
+            "This usually means the odds provider doesn't cover that tournament (e.g. Auckland). "
+            "\n\nOptions:" 
+            f"\n- Provide odds manually in data/raw/odds.csv and run: python main.py compare-odds" 
+            f"\n- Or set {config.sport_keys_env} to a supported tennis key (comma-delimited)." 
+            f"\n\nTennis sports available from this API key include titles like: {available[:12]}"
+        )
     rows: list[dict[str, Any]] = []
 
     for sport_key in sport_keys:

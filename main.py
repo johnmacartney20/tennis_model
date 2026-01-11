@@ -40,6 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("THE_ODDS_API_REGIONS", "us"),
         help="The Odds API regions param (default: us). Supported: us, us2, uk, au, eu",
     )
+    fetch.add_argument(
+        "--sport-keys",
+        default=os.getenv("THE_ODDS_API_SPORT_KEYS", ""),
+        help="Override The Odds API sport keys (comma-delimited). Also supports env THE_ODDS_API_SPORT_KEYS.",
+    )
 
     odds = sub.add_parser("compare-odds", help="Compare predictions to market odds (CSV)")
     odds.add_argument(
@@ -95,6 +100,8 @@ def main() -> None:
         from src.odds.fetch_theoddsapi import TheOddsApiConfig
 
         cfg = TheOddsApiConfig(regions=args.regions)
+        if args.sport_keys:
+            os.environ["THE_ODDS_API_SPORT_KEYS"] = str(args.sport_keys)
         out = fetch_odds_theoddsapi(
             upcoming_csv=(None if args.upcoming_csv is None else Path(args.upcoming_csv)),
             out_csv=(None if args.out_csv is None else Path(args.out_csv)),
